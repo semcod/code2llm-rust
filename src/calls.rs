@@ -141,18 +141,21 @@ pub fn resolve_call_graph(
                     .entry(resolved.to_string())
                     .or_default()
                     .push(func_name.clone());
+            } else {
+                res_calls.push(called.clone());
             }
         }
         resolved_calls.insert(func_name.clone(), res_calls);
     }
 
     let mut entry_points: Vec<String> = Vec::new();
-    for (name, callers) in &called_by {
-        if callers.is_empty() {
-            entry_points.push(name.clone());
+    for (name, _) in functions_with_calls {
+        if let Some(callers) = called_by.get(name) {
+            if callers.is_empty() {
+                entry_points.push(name.clone());
+            }
         }
     }
-    entry_points.sort();
 
     CallGraphResolution {
         resolved_calls,
