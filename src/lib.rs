@@ -11,6 +11,8 @@ pub mod cycles;
 pub mod discovery;
 pub mod reachability;
 pub mod smells;
+pub mod cache;
+pub mod toon;
 
 /// Extract the body of a function between braces starting at `start_line` (1-indexed).
 #[pyfunction]
@@ -165,6 +167,61 @@ fn walk_project_files(
     })
 }
 
+/// Compute content hash for a file.
+#[pyfunction]
+#[pyo3(signature = (filepath, analyzer_version))]
+fn compute_file_content_hash(filepath: &str, analyzer_version: &str) -> Option<String> {
+    cache::compute_file_content_hash(filepath, analyzer_version)
+}
+
+/// Check changed files in parallel using Rayon.
+#[pyfunction]
+#[pyo3(signature = (project_dir, filepaths, manifest_entries, analyzer_version))]
+fn check_changed_files(
+    py: Python<'_>,
+    project_dir: &str,
+    filepaths: Vec<String>,
+    manifest_entries: HashMap<String, (String, f64, u64)>,
+    analyzer_version: &str,
+) -> (Vec<String>, Vec<String>, Vec<(String, f64)>) {
+    py.allow_threads(|| {
+        let res = cache::check_changed_files_parallel(
+            project_dir,
+            &filepaths,
+            &manifest_entries,
+            analyzer_version,
+        );
+        (res.changed, res.cached, res.refreshed)
+    })
+}
+
+/// Format header lines for analysis.toon.yaml.
+#[pyfunction]
+#[pyo3(signature = (nfiles, total_lines, lang_label, timestamp, avg_cc, critical_cc, total_funcs, dups, cycles))]
+fn format_toon_header(
+    nfiles: usize,
+    total_lines: usize,
+    lang_label: &str,
+    timestamp: &str,
+    avg_cc: f64,
+    critical_cc: usize,
+    total_funcs: usize,
+    dups: usize,
+    cycles: usize,
+) -> Vec<String> {
+    toon::format_toon_header(
+        nfiles,
+        total_lines,
+        lang_label,
+        timestamp,
+        avg_cc,
+        critical_cc,
+        total_funcs,
+        dups,
+        cycles,
+    )
+}
+
 /// Module initialization
 #[pymodule]
 fn code2llm_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -180,7 +237,11 @@ fn code2llm_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(detect_god_functions, m)?)?;
     m.add_function(wrap_pyfunction!(detect_data_clumps, m)?)?;
     m.add_function(wrap_pyfunction!(walk_project_files, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_file_content_hash, m)?)?;
+    m.add_function(wrap_pyfunction!(check_changed_files, m)?)?;
+    m.add_function(wrap_pyfunction!(format_toon_header, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
+
 
