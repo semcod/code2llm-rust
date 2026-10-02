@@ -222,6 +222,23 @@ fn format_toon_header(
     )
 }
 
+/// Resolve call graph edges and find entry points.
+#[pyfunction]
+#[pyo3(signature = (functions_with_calls))]
+fn resolve_call_graph(
+    py: Python<'_>,
+    functions_with_calls: Vec<(String, Vec<String>)>,
+) -> (
+    HashMap<String, Vec<String>>,
+    HashMap<String, Vec<String>>,
+    Vec<String>,
+) {
+    py.allow_threads(|| {
+        let res = calls::resolve_call_graph(&functions_with_calls);
+        (res.resolved_calls, res.called_by, res.entry_points)
+    })
+}
+
 /// Module initialization
 #[pymodule]
 fn code2llm_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -240,8 +257,10 @@ fn code2llm_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compute_file_content_hash, m)?)?;
     m.add_function(wrap_pyfunction!(check_changed_files, m)?)?;
     m.add_function(wrap_pyfunction!(format_toon_header, m)?)?;
+    m.add_function(wrap_pyfunction!(resolve_call_graph, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
+
 
 
