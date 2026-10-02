@@ -13,6 +13,7 @@ pub mod reachability;
 pub mod smells;
 pub mod cache;
 pub mod toon;
+pub mod pipelines;
 
 /// Extract the body of a function between braces starting at `start_line` (1-indexed).
 #[pyfunction]
@@ -239,6 +240,35 @@ fn resolve_call_graph(
     })
 }
 
+/// Detect pipeline paths from call graph.
+#[pyfunction]
+#[pyo3(signature = (nodes, edges, min_length = 3, max_pipelines = 12))]
+fn find_pipeline_paths(
+    py: Python<'_>,
+    nodes: Vec<String>,
+    edges: Vec<(String, String)>,
+    min_length: usize,
+    max_pipelines: usize,
+) -> Vec<Vec<String>> {
+    py.allow_threads(|| pipelines::find_pipeline_paths(&nodes, &edges, min_length, max_pipelines))
+}
+
+/// Calculate call metrics (fan_in, fan_out, complexity) and callers.
+#[pyfunction]
+#[pyo3(signature = (functions))]
+fn calculate_call_metrics(
+    py: Python<'_>,
+    functions: Vec<(String, Vec<String>, Vec<String>, f64)>,
+) -> (
+    HashMap<String, (usize, usize, f64)>,
+    HashMap<String, Vec<String>>,
+) {
+    py.allow_threads(|| {
+        let res = calls::calculate_call_metrics(&functions);
+        (res.metrics, res.called_by)
+    })
+}
+
 /// Module initialization
 #[pymodule]
 fn code2llm_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -258,6 +288,8 @@ fn code2llm_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(check_changed_files, m)?)?;
     m.add_function(wrap_pyfunction!(format_toon_header, m)?)?;
     m.add_function(wrap_pyfunction!(resolve_call_graph, m)?)?;
+    m.add_function(wrap_pyfunction!(find_pipeline_paths, m)?)?;
+    m.add_function(wrap_pyfunction!(calculate_call_metrics, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

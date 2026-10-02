@@ -164,6 +164,57 @@ pub fn resolve_call_graph(
     }
 }
 
+/// Result of call metrics calculation.
+pub struct CallMetricsResult {
+    pub metrics: HashMap<String, (usize, usize, f64)>, // fan_in, fan_out, complexity
+    pub called_by: HashMap<String, Vec<String>>,
+}
+
+/// Fast native calculation of fan-in, fan-out and callers.
+pub fn calculate_call_metrics(
+    functions: &[(String, Vec<String>, Vec<String>, f64)],
+) -> CallMetricsResult {
+    let known_funcs: HashSet<&str> = functions.iter().map(|(n, _, _, _)| n.as_str()).collect();
+
+    let mut callers_map: HashMap<String, Vec<String>> = HashMap::with_capacity(functions.len());
+    let mut callers_set: HashMap<&str, HashSet<&str>> = HashMap::with_capacity(functions.len());
+
+    for (name, _, called_by, _) in functions {
+        let entry_set = callers_set.entry(name.as_str()).or_default();
+        let entry_vec = callers_map.entry(name.clone()).or_default();
+        for caller in called_by {
+            if entry_set.insert(caller.as_str()) {
+                entry_vec.push(caller.clone());
+            }
+        }
+    }
+
+    for (caller_name, calls, _, _) in functions {
+        for callee in calls {
+            let callee_str = callee.as_str();
+            if known_funcs.contains(callee_str) {
+                let entry_set = callers_set.entry(callee_str).or_default();
+                if entry_set.insert(caller_name.as_str()) {
+                    callers_map.entry(callee.clone()).or_default().push(caller_name.clone());
+                }
+            }
+        }
+    }
+
+    let mut metrics = HashMap::with_capacity(functions.len());
+    for (name, calls, _, complexity) in functions {
+        let unique_calls: HashSet<&str> = calls.iter().map(|s| s.as_str()).collect();
+        let fan_out = unique_calls.len();
+        let fan_in = callers_set.get(name.as_str()).map(|s| s.len()).unwrap_or(0);
+        metrics.insert(name.clone(), (fan_in, fan_out, *complexity));
+    }
+
+    CallMetricsResult {
+        metrics,
+        called_by: callers_map,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,6 +233,19 @@ mod tests {
         assert_eq!(res.called_by["app.helper"], vec!["app.main"]);
         assert_eq!(res.called_by["db.query"], vec!["app.helper"]);
         assert_eq!(res.entry_points, vec!["app.main"]);
+    }
+
+    #[test]
+    fn test_calculate_call_metrics() {
+        let input = vec![
+            ("app.main".to_string(), vec!["app.helper".to_string()], vec![], 2.0),
+            ("app.helper".to_string(), vec![], vec![], 5.0),
+        ];
+
+        let res = calculate_call_metrics(&input);
+        assert_eq!(res.metrics["app.main"], (0, 1, 2.0));
+        assert_eq!(res.metrics["app.helper"], (1, 0, 5.0));
+        assert_eq!(res.called_by["app.helper"], vec!["app.main"]);
     }
 }
 
