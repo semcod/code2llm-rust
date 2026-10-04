@@ -256,7 +256,7 @@ strategies:
     test: cargo test
     build: cargo build --release
     publish: cargo publish
-    publish_enabled: true
+    publish_enabled: false
     dependencies:
       file: Cargo.lock
       lock: cargo update
