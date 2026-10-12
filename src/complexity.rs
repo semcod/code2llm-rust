@@ -88,6 +88,11 @@ fn count_c_family_branches(body: &str) -> u32 {
     let mut i = 0;
 
     while i < len {
+        if !body.is_char_boundary(i) {
+            i += 1;
+            continue;
+        }
+
         if i + 1 < len {
             if bytes[i] == b'&' && bytes[i + 1] == b'&' {
                 count += 1;
@@ -129,8 +134,7 @@ fn count_c_family_branches(body: &str) -> u32 {
             }
         }
 
-        let prev_char = if i > 0 { Some(bytes[i - 1] as char) } else { None };
-        let prev_word = prev_char.map_or(false, |c| c.is_alphanumeric() || c == '_');
+        let prev_word = i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
 
         if !prev_word {
             // Check else if
@@ -181,6 +185,11 @@ fn count_go_branches(body: &str) -> u32 {
     let mut i = 0;
 
     while i < len {
+        if !body.is_char_boundary(i) {
+            i += 1;
+            continue;
+        }
+
         if i + 1 < len {
             if (bytes[i] == b'&' && bytes[i + 1] == b'&') || (bytes[i] == b'|' && bytes[i + 1] == b'|') {
                 count += 1;
@@ -189,8 +198,7 @@ fn count_go_branches(body: &str) -> u32 {
             }
         }
 
-        let prev_char = if i > 0 { Some(bytes[i - 1] as char) } else { None };
-        let prev_word = prev_char.map_or(false, |c| c.is_alphanumeric() || c == '_');
+        let prev_word = i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
 
         if !prev_word {
             let keywords = ["if", "for", "switch", "case", "select", "go", "defer"];
@@ -225,6 +233,11 @@ fn count_rust_branches(body: &str) -> u32 {
     let mut i = 0;
 
     while i < len {
+        if !body.is_char_boundary(i) {
+            i += 1;
+            continue;
+        }
+
         if i + 1 < len {
             if (bytes[i] == b'&' && bytes[i + 1] == b'&') || (bytes[i] == b'|' && bytes[i + 1] == b'|') {
                 count += 1;
@@ -239,8 +252,7 @@ fn count_rust_branches(body: &str) -> u32 {
             continue;
         }
 
-        let prev_char = if i > 0 { Some(bytes[i - 1] as char) } else { None };
-        let prev_word = prev_char.map_or(false, |c| c.is_alphanumeric() || c == '_');
+        let prev_word = i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
 
         if !prev_word {
             if body[i..].starts_with("else") {
@@ -311,5 +323,16 @@ mod tests {
         assert_eq!(res.len(), 2);
         assert_eq!(res[0].1, 2);
         assert_eq!(res[1].1, 3);
+    }
+
+    #[test]
+    fn test_multibyte_utf8_complexity() {
+        let body = "{\n  // Multi-byte chars: → — ✅ 🚀 ╔ ─ …\n  let icon = \"🚀\";\n  if (a && b) {\n    println!(\"✅ — all done → next\");\n  } else if (c) {\n    println!(\"…\");\n  }\n}";
+        let (cc, rank) = calculate_complexity(body, "c_family");
+        assert_eq!(cc, 4);
+        assert_eq!(rank, "A");
+
+        let (cc_rust, _) = calculate_complexity(body, "rust");
+        assert_eq!(cc_rust, 4);
     }
 }
